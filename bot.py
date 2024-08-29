@@ -1,7 +1,11 @@
 import os
 from telegram import Update, InputFile
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+import openai
 from pymongo import MongoClient
+
+# Initialize OpenAI API Key
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Initialize MongoDB Client
 mongo_client = MongoClient(os.getenv("MONGODB_URI"))
@@ -10,7 +14,7 @@ posts_collection = db['posts']
 
 # Start Command
 def start(update: Update, context: CallbackContext):
-    update.message.reply_text("Hello! I'm your assistant bot. Send me a file or video to rename, or type a message to create a post.")
+    update.message.reply_text("Hello! I'm your assistant bot. Send me a file or video to rename, or type a message to create a post. For AI assistance, type your query!")
 
 # Forward Message
 def forward_message(update: Update, context: CallbackContext):
@@ -47,6 +51,24 @@ def set_post_format(update: Update, context: CallbackContext):
     )
     update.message.reply_text(f"Post format set to: {format_string}")
 
+# AI Feature: Process user query with OpenAI API
+def ai_query(update: Update, context: CallbackContext):
+    query = " ".join(context.args)
+    if not query:
+        update.message.reply_text("Please provide a query for the AI.")
+        return
+    
+    try:
+        response = openai.Completion.create(
+            engine="davinci-codex",
+            prompt=query,
+            max_tokens=150
+        )
+        ai_response = response.choices[0].text.strip()
+        update.message.reply_text(ai_response)
+    except Exception as e:
+        update.message.reply_text(f"Error: {e}")
+
 def main():
     updater = Updater(token=os.getenv("TELEGRAM_BOT_TOKEN"), use_context=True)
     dp = updater.dispatcher
@@ -56,6 +78,7 @@ def main():
     dp.add_handler(MessageHandler(Filters.document | Filters.video, handle_file))
     dp.add_handler(CommandHandler("createpost", create_post))
     dp.add_handler(CommandHandler("setpostformat", set_post_format))
+    dp.add_handler(CommandHandler("ai", ai_query))
 
     updater.start_polling()
     updater.idle()
